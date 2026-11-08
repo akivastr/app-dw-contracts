@@ -1,0 +1,8 @@
+# Who must review each direction of the contract.
+# Replace the example handles with your real teams or users, then uncomment.
+
+# What the warehouse reads from the app DB: the warehouse team signs off.
+# /outbound/  @your-org/data-warehouse
+
+# What the warehouse writes into the app DB: the app team signs off.
+# /inbound/   @your-org/app-team

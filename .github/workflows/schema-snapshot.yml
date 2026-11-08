@@ -1,0 +1,103 @@
+name: Schema snapshot
+
+# Snapshots the two contract schemas and opens (or updates) a PR when they change.
+#
+# Demo mode  (no PG_URL secret): starts a throwaway Postgres, loads demo/seed.sql,
+#             applies the scenario you pick, and opens a PR on its own branch.
+# Live mode  (PG_URL secret set): snapshots the real database on a schedule.
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"   # every 6 hours
+  workflow_dispatch:
+    inputs:
+      demo_scenario:
+        description: "Demo mode only: change to apply before snapshotting"
+        type: choice
+        default: none
+        options:
+          - none
+          - 1-add-column
+          - 2-breaking-export-change
+          - 3-new-enum-value
+          - 4-inbound-change
+          - 5-untracked-change
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: schema-snapshot-${{ inputs.demo_scenario || 'live' }}
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    # For a database on a private network, register a runner inside it and set
+    # the repo variable SNAPSHOT_RUNNER (e.g. "self-hosted").
+    runs-on: ${{ vars.SNAPSHOT_RUNNER || 'ubuntu-latest' }}
+    env:
+      LIVE: ${{ secrets.PG_URL != '' }}
+      OUTBOUND_SCHEMAS: ${{ vars.OUTBOUND_SCHEMAS || 'dw_export' }}
+      INBOUND_SCHEMAS: ${{ vars.INBOUND_SCHEMAS || 'dw_ingest' }}
+      PG_MAJOR: ${{ vars.PG_MAJOR || '16' }}
+      SCENARIO: ${{ inputs.demo_scenario || 'none' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start demo database
+        if: env.LIVE != 'true'
+        run: |
+          docker run -d --name demo-pg -e POSTGRES_PASSWORD=demo "postgres:${PG_MAJOR}"
+          # Wait on TCP: the image's temporary init server only listens on a socket.
+          for _ in $(seq 1 60); do
+            docker exec demo-pg pg_isready -q -h 127.0.0.1 -U postgres && break
+            sleep 1
+          done
+          psql_demo() { docker exec -i demo-pg psql -h 127.0.0.1 -U postgres -q -v ON_ERROR_STOP=1; }
+          psql_demo < demo/seed.sql
+          if [ "$SCENARIO" != none ]; then
+            echo "Applying demo scenario: $SCENARIO"
+            psql_demo < "demo/scenarios/${SCENARIO}.sql"
+          fi
+          echo "PG_URL=postgresql://postgres:demo@127.0.0.1:5432/postgres" >> "$GITHUB_ENV"
+          echo "PG_DUMP=docker exec demo-pg pg_dump" >> "$GITHUB_ENV"
+
+      - name: Install pg_dump ${{ env.PG_MAJOR }}
+        if: env.LIVE == 'true'
+        run: |
+          if pg_dump --version 2>/dev/null | grep -q " ${PG_MAJOR}\."; then exit 0; fi
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -qq "postgresql-client-${PG_MAJOR}"
+
+      - name: Snapshot contract schemas
+        env:
+          LIVE_PG_URL: ${{ secrets.PG_URL }}
+        run: |
+          if [ "$LIVE" = true ]; then export PG_URL="$LIVE_PG_URL"; fi
+          ./scripts/snapshot.sh
+
+      - name: Summarize changes
+        id: summary
+        run: |
+          python3 scripts/summarize.py --out "$RUNNER_TEMP/pr-body.md"
+          cat "$RUNNER_TEMP/pr-body.md" >> "$GITHUB_STEP_SUMMARY"
+
+      # Opens a PR when the snapshot differs from main, updates it on later runs,
+      # and closes it if the schema goes back to matching main.
+      - name: Open or update pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: ${{ env.LIVE == 'true' && 'schema-drift/live' || format('schema-drift/demo-{0}', env.SCENARIO) }}
+          delete-branch: true
+          add-paths: |
+            outbound
+            inbound
+          commit-message: "chore: schema snapshot"
+          title: >-
+            ${{ env.LIVE != 'true' && format('[Demo: {0}] ', env.SCENARIO) || '' }}${{
+            steps.summary.outputs.breaking != '0' && 'Breaking schema contract changes' || 'Schema contract changes' }}
+          body-path: ${{ runner.temp }}/pr-body.md
+          labels: ${{ steps.summary.outputs.breaking != '0' && 'schema-change,breaking' || 'schema-change' }}
