@@ -2,8 +2,8 @@ CREATE TABLE dw_export.assessments (
     assessment_id bigint NOT NULL,
     resident_id bigint NOT NULL,
     assessment_type text NOT NULL,
-    reference_date date NOT NULL,
-    total_score numeric(6,2),
+    reference_date date,
+    total_score integer,
     completed_at timestamp with time zone
 );
 

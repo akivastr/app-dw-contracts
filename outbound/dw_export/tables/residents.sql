@@ -1,7 +1,6 @@
 CREATE TABLE dw_export.residents (
     resident_id bigint NOT NULL,
     facility_id integer NOT NULL,
-    external_ref text NOT NULL,
     status dw_export.resident_status DEFAULT 'admitted'::dw_export.resident_status NOT NULL,
     admitted_on date NOT NULL,
     discharged_on date,
