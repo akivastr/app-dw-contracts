@@ -1,0 +1,18 @@
+{
+  "name": "app-dw-contracts",
+  "private": true,
+  "type": "module",
+  "description": "Tracks the app DB <-> data warehouse contract schemas and opens PRs when they change",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "snapshot": "./scripts/snapshot.sh",
+    "summarize": "node scripts/summarize.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

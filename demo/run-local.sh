@@ -39,7 +39,7 @@ run_sql < "demo/scenarios/$SCENARIO.sql"
 echo; echo "===== Files that would change ====="
 git status --short -- outbound inbound || true
 echo; echo "===== PR description ====="
-python3 scripts/summarize.py
+node scripts/summarize.ts
 
 # Restore the committed baseline so the repo stays clean.
 git checkout -q -- outbound inbound

@@ -33,19 +33,19 @@ See [docs/example-pr.md](docs/example-pr.md) for a full example PR.
 
 ```mermaid
 flowchart LR
-    DB[(App DB<br/>Postgres)] -->|pg_dump --schema-only<br/>dw_export, dw_ingest| S[split_schema.py<br/>one file per object]
+    DB[(App DB<br/>Postgres)] -->|pg_dump --schema-only<br/>dw_export, dw_ingest| S[split-schema.ts<br/>one file per object]
     S --> D{Differs from main?}
     D -- no --> N[Nothing happens]
-    D -- yes --> C[summarize.py<br/>breaking / review / safe]
+    D -- yes --> C[summarize.ts<br/>breaking / review / safe]
     C --> PR[Pull request<br/>labels + CODEOWNERS]
     PR -->|merge| M[main = new baseline]
 ```
 
 1. Every 6 hours, `.github/workflows/schema-snapshot.yml` runs `scripts/snapshot.sh`.
    It runs `pg_dump --schema-only` for each contract schema. It reads no data.
-2. `scripts/split_schema.py` splits the dump into one file per object, with each
+2. `scripts/split-schema.ts` splits the dump into one file per object, with each
    table's constraints, indexes, triggers and comments in that table's file.
-3. `scripts/summarize.py` compares the snapshot with `main` and writes the PR
+3. `scripts/summarize.ts` compares the snapshot with `main` and writes the PR
    description.
 4. If anything differs, the workflow opens a PR, or updates the open one. If the
    schema goes back to matching `main`, the PR closes itself.
@@ -77,7 +77,7 @@ Close them without merging when you're done.
 
 ### On your machine
 
-Requires Docker and Python 3.
+Requires Docker and Node 22.18+ (Node 24 recommended).
 
 ```bash
 ./demo/run-local.sh 2-breaking-export-change
@@ -116,14 +116,30 @@ the repo.
 - `--no-owner --no-privileges` keeps role names and grants out of the repo. Drop
   `--no-privileges` in `scripts/snapshot.sh` if you want grant changes tracked too.
 
+## Development
+
+The scripts are TypeScript that Node runs directly through built-in type
+stripping, so there's no build step and no runtime dependencies. Running them
+needs nothing beyond Node; `npm install` is only for editor types and the type check:
+
+```bash
+npm install
+npm run typecheck
+```
+
+Stick to erasable TypeScript syntax: types, interfaces and `as` are fine;
+`enum`, `namespace` and constructor parameter properties are not. The
+`erasableSyntaxOnly` setting in `tsconfig.json` enforces this.
+
 ## Layout
 
 ```
 .github/workflows/schema-snapshot.yml   scheduled job + demo mode
 .github/CODEOWNERS                      who reviews which direction
 scripts/snapshot.sh                     pg_dump each contract schema → split
-scripts/split_schema.py                 pg_dump output → one file per object
-scripts/summarize.py                    diff vs main → PR description + labels
+scripts/split-schema.ts                 pg_dump output → one file per object
+scripts/summarize.ts                    diff vs main → PR description + labels
+package.json, tsconfig.json, .nvmrc     Node version + type checking (no build)
 outbound/                               current snapshot of dw_export
 inbound/                                current snapshot of dw_ingest
 demo/                                   seed database, scenarios, local runner

@@ -18,7 +18,7 @@ snapshot() {
   for s in ${schemas//,/ }; do args+=(--schema="$s"); done
   # shellcheck disable=SC2086  # PG_DUMP may be a multi-word command (e.g. docker run ...)
   $PG_DUMP "$PG_URL" --schema-only --no-owner --no-privileges --lock-wait-timeout=30s "${args[@]}" \
-    | python3 "$ROOT/scripts/split_schema.py" --out "$ROOT/$out" --strict
+    | node "$ROOT/scripts/split-schema.ts" --out "$ROOT/$out" --strict
 }
 
 snapshot outbound "$OUTBOUND_SCHEMAS"
