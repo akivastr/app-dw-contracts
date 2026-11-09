@@ -5,7 +5,8 @@ CREATE TABLE dw_export.residents (
     status dw_export.resident_status DEFAULT 'admitted'::dw_export.resident_status NOT NULL,
     admitted_on date NOT NULL,
     discharged_on date,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    primary_payer text
 );
 
 COMMENT ON TABLE dw_export.residents IS 'One row per resident stay. Exported nightly.';
